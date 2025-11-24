@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chrono Rift</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0e27 0%, #1a0033 50%, #0a0e27 100%);
+            color: #fff;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        #gameContainer {
+            position: relative;
+            width: 100%;
+            max-width: 900px;
+            height: 100vh;
+            max-height: 600px;
+        }
+
+        canvas {
+            border: 2px solid #00ffff;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.5);
+            background: #000;
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: crisp-edges;
+        }
+
+        .ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            transition: opacity 0.3s;
+        }
+
+        .ui-overlay.hidden {
+            display: none;
+        }
+
+        .game-title {
+            font-size: 4rem;
+            font-weight: bold;
+            background: linear-gradient(45deg, #00ffff, #ff00ff, #00ffff);
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: gradient 3s ease infinite;
+            margin-bottom: 2rem;
+            text-shadow: 0 0 30px rgba(0, 255, 255, 0.5);
+        }
+
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .menu-button {
+            padding: 15px 40px;
+            margin: 10px;
+            font-size: 1.2rem;
+            background: linear-gradient(45deg, #00ffff, #0080ff);
+            border: none;
+            border-radius: 50px;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(0, 255, 255, 0.3);
+        }
+
+        .menu-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 255, 255, 0.5);
+        }
+
+        .instructions {
+            text-align: center;
+            padding: 20px;
+            max-width: 600px;
+        }
+
+        .instructions h2 {
+            color: #00ffff;
+            margin-bottom: 20px;
+        }
+
+        .instructions p {
+            margin: 10px 0;
+            line-height: 1.6;
+        }
+
+        .hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .health-bar {
+            display: flex;
+            gap: 10px;
+        }
+
+        .health-heart {
+            width: 30px;
+            height: 30px;
+            background: radial-gradient(circle, #ff0066, #990033);
+            clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+            filter: drop-shadow(0 0 10px rgba(255, 0, 102, 0.5));
+            transition: opacity 0.3s;
+        }
+
+        .health-heart.empty {
+            opacity: 0.3;
+        }
+
+        .shard-counter {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.2rem;
+            color: #ffff00;
+            text-shadow: 0 0 10px rgba(255, 255, 0, 0.5);
+        }
+
+        .level-indicator {
+            font-size: 1.2rem;
+            color: #00ffff;
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        }
+
+        .dash-cooldown {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 100px;
+            height: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid #00ffff;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .dash-cooldown-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ffff, #0080ff);
+            transition: width 0.1s;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div class="hud hidden" id="gameHUD">
+            <div class="health-bar">
+                <div class="health-heart" id="heart1"></div>
+                <div class="health-heart" id="heart2"></div>
+                <div class="health-heart" id="heart3"></div>
+            </div>
+            <div class="level-indicator">Level <span id="levelNumber">1</span></div>
+            <div class="shard-counter">
+                <span>⚡</span>
+                <span id="shardCount">0</span> / 3
+            </div>
+        </div>
+        
+        <div class="dash-cooldown hidden" id="dashCooldown">
+            <div class="dash-cooldown-fill" id="dashCooldownFill"></div>
+        </div>
+
+        <div class="ui-overlay" id="startScreen">
+            <h1 class="game-title">CHRONO RIFT</h1>
+            <button class="menu-button" onclick="game.startGame()">PLAY</button>
+            <button class="menu-button" onclick="game.showInstructions()">INSTRUCTIONS</button>
+        </div>
+
+        <div class="ui-overlay hidden" id="instructionsScreen">
+            <div class="instructions">
+                <h2>How to Play</h2>
+                <p><strong>Arrow Keys / A,D:</strong> Move left and right</p>
+                <p><strong>Space / W / Up Arrow:</strong> Jump</p>
+                <p><strong>Shift:</strong> Dash (short burst with cooldown)</p>
+                <p><strong>Objective:</strong> Collect 3 Time Shards to open the Time Gate</p>
+                <p><strong>Enemies:</strong> Avoid or defeat enemies to survive</p>
+                <p><strong>Goal:</strong> Reach the gate before time collapses!</p>
+                <button class="menu-button" onclick="game.hideInstructions()">BACK</button>
+            </div>
+        </div>
+
+        <div class="ui-overlay hidden" id="winScreen">
+            <h1 class="game-title">YOU ESCAPED!</h1>
+            <p style="font-size: 1.5rem; margin: 20px;">You successfully navigated the Chrono Rift!</p>
+            <button class="menu-button" onclick="game.restartGame()">PLAY AGAIN</button>
+        </div>
+
+        <div class="ui-overlay hidden" id="loseScreen">
+            <h1 class="game-title">TIME COLLAPSED</h1>
+            <p style="font-size: 1.5rem; margin: 20px;">The rift consumed you...</p>
+            <button class="menu-button" onclick="game.restartGame()">TRY AGAIN</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Set canvas size
+        function resizeCanvas() {
+            const container = document.getElementById('gameContainer');
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        class Game {
+            constructor() {
+                this.currentLevel = 1;
+                this.maxLevels = 10;
+                this.gameState = 'menu';
+                this.particles = [];
+                this.timeDistortion = 0;
+                this.init();
+            }
+
+            init() {
+                this.player = new Player();
+                this.enemies = [];
+                this.shards = [];
+                this.platforms = [];
+                this.gate = null;
+                this.keys = {};
+                this.setupEventListeners();
+            }
+
+            setupEventListeners() {
+                document.addEventListener('keydown', (e) => {
+                    this.keys[e.key.toLowerCase()] = true;
+                    if (e.key === ' ') e.preventDefault();
+                });
+                
+                document.addEventListener('keyup', (e) => {
+                    this.keys[e.key.toLowerCase()] = false;
+                });
+            }
+
+            startGame() {
+                document.getElementById('startScreen').classList.add('hidden');
+                document.getElementById('gameHUD').classList.remove('hidden');
+                document.getElementById('dashCooldown').classList.remove('hidden');
+                this.gameState = 'playing';
+                this.currentLevel = 1;
+                this.loadLevel(this.currentLevel);
+                this.gameLoop();
+            }
+
+            loadLevel(level) {
+                this.enemies = [];
+                this.shards = [];
+                this.platforms = [];
+                this.particles = [];
+                this.player.health = 3;
+                this.player.shardsCollected = 0;
+                this.player.x = 100;
+                this.player.y = canvas.height - 200;
+                this.player.vx = 0;
+                this.player.vy = 0;
+                
+                document.getElementById('levelNumber').textContent = level;
+                this.updateHealthDisplay();
+                this.updateShardDisplay();
+
+                // Create platforms
+                const platformCount = 5 + Math.floor(level / 2);
+                for (let i = 0; i < platformCount; i++) {
+                    this.platforms.push(new Platform(
+                        Math.random() * (canvas.width - 150) + 50,
+                        canvas.height - 150 - (i * 80),
+                        150,
+                        20
+                    ));
+                }
+
+                // Add ground platforms
+                this.platforms.push(new Platform(0, canvas.height - 50, canvas.width, 50));
+                this.platforms.push(new Platform(canvas.width - 200, canvas.height - 150, 200, 20));
+
+                // Create enemies
+                const enemyCount = Math.min(4 + Math.floor(level / 2), 12);
+                for (let i = 0; i < enemyCount; i++) {
+                    const type = ['crawler', 'wraith', 'bomber', 'beast'][i % 4];
+                    this.enemies.push(new Enemy(
+                        Math.random() * (canvas.width - 100) + 50,
+                        Math.random() * (canvas.height - 300) + 100,
+                        type
+                    ));
+                }
+
+                // Create shards
+                for (let i = 0; i < 3; i++) {
+                    this.shards.push(new Shard(
+                        Math.random() * (canvas.width - 100) + 50,
+                        Math.random() * (canvas.height - 300) + 100
+                    ));
+                }
+
+                // Create gate
+                this.gate = new Gate(canvas.width - 150, canvas.height - 250);
+            }
+
+            update() {
+                if (this.gameState !== 'playing') return;
+
+                // Update time distortion effect
+                this.timeDistortion = Math.sin(Date.now() * 0.001) * 0.1;
+
+                // Update player
+                this.player.update(this.keys, this.platforms);
+
+                // Update enemies
+                this.enemies.forEach((enemy, index) => {
+                    enemy.update(this.player, this.platforms);
+                    
+                    // Check collision with player
+                    if (this.checkCollision(this.player, enemy)) {
+                        if (this.player.dashing) {
+                            enemy.hit();
+                            if (enemy.health <= 0) {
+                                if (enemy.type === 'beast') {
+                                    // Split into two smaller beasts
+                                    this.enemies.push(new Enemy(enemy.x - 20, enemy.y, 'beast_small'));
+                                    this.enemies.push(new Enemy(enemy.x + 20, enemy.y, 'beast_small'));
+                                }
+                                this.enemies.splice(index, 1);
+                                this.createExplosion(enemy.x, enemy.y);
+                            }
+                        } else if (!this.player.invulnerable) {
+                            this.player.takeDamage();
+                            this.updateHealthDisplay();
+                            if (this.player.health <= 0) {
+                                this.gameOver();
+                            }
+                        }
+                    }
+                });
+
+                // Update shards
+                this.shards.forEach((shard, index) => {
+                    shard.update();
+                    if (this.checkCollision(this.player, shard)) {
+                        this.shards.splice(index, 1);
+                        this.player.shardsCollected++;
+                        this.updateShardDisplay();
+                        this.createCollectEffect(shard.x, shard.y);
+                    }
+                });
+
+                // Check gate
+                if (this.player.shardsCollected >= 3 && this.gate) {
+                    this.gate.open = true;
+                    if (this.checkCollision(this.player, this.gate)) {
+                        this.nextLevel();
+                    }
+                }
+
+                // Update particles
+                this.particles = this.particles.filter(p => {
+                    p.update();
+                    return p.life > 0;
+                });
+
+                // Update dash cooldown
+                const dashFill = document.getElementById('dashCooldownFill');
+                if (this.player.dashCooldown > 0) {
+                    dashFill.style.width = `${(1 - this.player.dashCooldown / this.player.maxDashCooldown) * 100}%`;
+                } else {
+                    dashFill.style.width = '100%';
+                }
+            }
+
+            render() {
+                // Clear canvas with time distortion effect
+                ctx.fillStyle = `rgba(10, 14, 39, ${0.9 + this.timeDistortion})`;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Draw background effects
+                this.drawBackgroundEffects();
+
+                // Draw platforms
+                this.platforms.forEach(platform => platform.draw(ctx));
+
+                // Draw gate
+                if (this.gate) this.gate.draw(ctx);
+
+                // Draw shards
+                this.shards.forEach(shard => shard.draw(ctx));
+
+                // Draw enemies
+                this.enemies.forEach(enemy => enemy.draw(ctx));
+
+                // Draw player
+                this.player.draw(ctx);
+
+                // Draw particles
+                this.particles.forEach(particle => particle.draw(ctx));
+            }
+
+            drawBackgroundEffects() {
+                // Time rift effect
+                ctx.save();
+                ctx.globalAlpha = 0.1;
+                for (let i = 0; i < 5; i++) {
+                    const x = (Date.now() * 0.01 * (i + 1)) % canvas.width;
+                    const gradient = ctx.createLinearGradient(x, 0, x + 200, canvas.height);
+                    gradient.addColorStop(0, '#00ffff');
+                    gradient.addColorStop(0.5, '#ff00ff');
+                    gradient.addColorStop(1, '#00ffff');
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(x - 100, 0, 200, canvas.height);
+                }
+                ctx.restore();
+            }
+
+            checkCollision(obj1, obj2) {
+                return obj1.x < obj2.x + obj2.width &&
+                       obj1.x + obj1.width > obj2.x &&
+                       obj1.y < obj2.y + obj2.height &&
+                       obj1.y + obj1.height > obj2.y;
+            }
+
+            createExplosion(x, y) {
+                for (let i = 0; i < 20; i++) {
+                    this.particles.push(new Particle(x, y, 'explosion'));
+                }
+            }
+
+            createCollectEffect(x, y) {
+                for (let i = 0; i < 15; i++) {
+                    this.particles.push(new Particle(x, y, 'collect'));
+                }
+            }
+
+            updateHealthDisplay() {
+                for (let i = 1; i <= 3; i++) {
+                    const heart = document.getElementById(`heart${i}`);
+                    if (i <= this.player.health) {
+                        heart.classList.remove('empty');
+                    } else {
+                        heart.classList.add('empty');
+                    }
+                }
+            }
+
+            updateShardDisplay() {
+                document.getElementById('shardCount').textContent = this.player.shardsCollected;
+            }
+
+            nextLevel() {
+                if (this.currentLevel >= this.maxLevels) {
+                    this.win();
+                } else {
+                    this.currentLevel++;
+                    this.loadLevel(this.currentLevel);
+                }
+            }
+
+            gameOver() {
+                this.gameState = 'gameover';
+                document.getElementById('loseScreen').classList.remove('hidden');
+                document.getElementById('gameHUD').classList.add('hidden');
+                document.getElementById('dashCooldown').classList.add('hidden');
+            }
+
+            win() {
+                this.gameState = 'win';
+                document.getElementById('winScreen').classList.remove('hidden');
+                document.getElementById('gameHUD').classList.add('hidden');
+                document.getElementById('dashCooldown').classList.add('hidden');
+            }
+
+            restartGame() {
+                document.getElementById('winScreen').classList.add('hidden');
+                document.getElementById('loseScreen').classList.add('hidden');
+                this.startGame();
+            }
+
+            showInstructions() {
+                document.getElementById('startScreen').classList.add('hidden');
+                document.getElementById('instructionsScreen').classList.remove('hidden');
+            }
+
+            hideInstructions() {
+                document.getElementById('instructionsScreen').classList.add('hidden');
+                document.getElementById('startScreen').classList.remove('hidden');
+            }
+
+            gameLoop() {
+                if (this.gameState === 'playing') {
+                    this.update();
+                    this.render();
+                    requestAnimationFrame(() => this.gameLoop());
+                }
+            }
+        }
+
+        class Player {
+            constructor() {
+                this.x = 100;
+                this.y = canvas.height - 200;
+                this.width = 30;
+                this.height = 40;
+                this.vx = 0;
+                this.vy = 0;
+                this.speed = 5;
+                this.jumpPower = 12;
+                this.health = 3;
+                this.shardsCollected = 0;
+                this.onGround = false;
+                this.dashing = false;
+                this.dashCooldown = 0;
+                this.maxDashCooldown = 60;
+                this.dashSpeed = 15;
+                this.invulnerable = false;
+                this.invulnerableTime = 0;
+                this.facing = 1;
+            }
+
+            update(keys, platforms) {
+                // Handle input
+                if (keys['arrowleft'] || keys['a']) {
+                    this.vx = -this.speed;
+                    this.facing = -1;
+                } else if (keys['arrowright'] || keys['d']) {
+                    this.vx = this.speed;
+                    this.facing = 1;
+                } else {
+                    this.vx *= 0.8;
+                }
+
+                // Jump
+                if ((keys[' '] || keys['w'] || keys['arrowup']) && this.onGround) {
+                    this.vy = -this.jumpPower;
+                    this.onGround = false;
+                }
+
+                // Dash
+                if (keys['shift'] && this.dashCooldown <= 0 && !this.dashing) {
+                    this.dashing = true;
+                    this.dashCooldown = this.maxDashCooldown;
+                    this.vx = this.dashSpeed * this.facing;
+                    this.invulnerable = true;
+                    this.invulnerableTime = 20;
+                }
+
+                // Apply dash
+                if (this.dashing) {
+                    this.vx *= 0.9;
+                    if (Math.abs(this.vx) < 1) {
+                        this.dashing = false;
+                    }
+                }
+
+                // Gravity
+                this.vy += 0.5;
+                if (this.vy > 15) this.vy = 15;
+
+                // Update position
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Keep player on screen
+                if (this.x < 0) this.x = 0;
+                if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
+
+                // Platform collision
+                this.onGround = false;
+                platforms.forEach(platform => {
+                    if (this.checkPlatformCollision(platform)) {
+                        if (this.vy > 0) {
+                            this.y = platform.y - this.height;
+                            this.vy = 0;
+                            this.onGround = true;
+                        }
+                    }
+                });
+
+                // Update cooldowns
+                if (this.dashCooldown > 0) this.dashCooldown--;
+                if (this.invulnerableTime > 0) {
+                    this.invulnerableTime--;
+                    if (this.invulnerableTime <= 0) {
+                        this.invulnerable = false;
+                    }
+                }
+            }
+
+            checkPlatformCollision(platform) {
+                return this.x < platform.x + platform.width &&
+                       this.x + this.width > platform.x &&
+                       this.y < platform.y + platform.height &&
+                       this.y + this.height > platform.y;
+            }
+
+            draw(ctx) {
+                ctx.save();
+                
+                // Draw dash trail
+                if (this.dashing) {
+                    ctx.globalAlpha = 0.3;
+                    for (let i = 1; i <= 3; i++) {
+                        ctx.fillStyle = '#00ffff';
+                        ctx.fillRect(this.x - this.vx * i * 0.3, this.y, this.width, this.height);
+                    }
+                    ctx.globalAlpha = 1;
+                }
+
+                // Draw player
+                if (this.invulnerable && Math.floor(this.invulnerableTime / 5) % 2 === 0) {
+                    ctx.globalAlpha = 0.5;
+                }
+
+                // Body
+                const gradient = ctx.createLinearGradient(this.x, this.y, this.x, this.y + this.height);
+                gradient.addColorStop(0, '#00ffff');
+                gradient.addColorStop(1, '#0080ff');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(this.x, this.y + 10, this.width, this.height - 10);
+
+                // Head
+                ctx.fillStyle = '#ffcc00';
+                ctx.beginPath();
+                ctx.arc(this.x + this.width/2, this.y + 10, 8, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Eyes
+                ctx.fillStyle = '#000';
+                const eyeOffset = this.facing * 3;
+                ctx.fillRect(this.x + this.width/2 - 4 + eyeOffset, this.y + 8, 2, 2);
+                ctx.fillRect(this.x + this.width/2 + 2 + eyeOffset, this.y + 8, 2, 2);
+
+                ctx.restore();
+            }
+
+            takeDamage() {
+                this.health--;
+                this.invulnerable = true;
+                this.invulnerableTime = 60;
+            }
+        }
+
+        class Enemy {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.type = type;
+                this.width = type === 'beast_small' ? 20 : 40;
+                this.height = type === 'beast_small' ? 20 : 40;
+                this.vx = 0;
+                this.vy = 0;
+                this.health = type === 'beast_small' ? 1 : 2;
+                this.time = 0;
+                this.originalX = x;
+                this.originalY = y;
+                this.color = this.getColorByType();
+            }
+
+            getColorByType() {
+                const colors = {
+                    crawler: '#ff0066',
+                    wraith: '#ff00ff',
+                    bomber: '#ff6600',
+                    beast: '#00ff00',
+                    beast_small: '#00aa00'
+                };
+                return colors[this.type] || '#ffffff';
+            }
+
+            update(player, platforms) {
+                this.time++;
+                
+                switch(this.type) {
+                    case 'crawler':
+                        this.vx = Math.sin(this.time * 0.05) * 3;
+                        this.x += this.vx;
+                        break;
+                        
+                    case 'wraith':
+                        this.x = this.originalX + Math.sin(this.time * 0.03) * 100;
+                        this.y = this.originalY + Math.sin(this.time * 0.02) * 30;
+                        break;
+                        
+                    case 'bomber':
+                        const dx = player.x - this.x;
+                        const dy = player.y - this.y;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+                        if (dist < 150) {
+                            this.vx = (dx / dist) * 2;
+                            this.vy = (dy / dist) * 2;
+                        } else {
+                            this.vx *= 0.95;
+                            this.vy *= 0.95;
+                        }
+                        this.x += this.vx;
+                        this.y += this.vy;
+                        
+                        // Explode if too close
+                        if (dist < 30) {
+                            this.health = 0;
+                        }
+                        break;
+                        
+                    case 'beast':
+                    case 'beast_small':
+                        this.vx = Math.cos(this.time * 0.04) * 2;
+                        this.vy = Math.sin(this.time * 0.04) * 1;
+                        this.x += this.vx;
+                        this.y += this.vy;
+                        break;
+                }
+
+                // Keep on screen
+                if (this.x < 0) this.x = canvas.width;
+                if (this.x > canvas.width) this.x = 0;
+            }
+
+            draw(ctx) {
+                ctx.save();
+                
+                // Draw enemy based on type
+                switch(this.type) {
+                    case 'crawler':
+                        // Spider-like creature
+                        ctx.fillStyle = this.color;
+                        ctx.fillRect(this.x, this.y + 10, this.width, this.height - 10);
+                        // Legs
+                        for (let i = 0; i < 4; i++) {
+                            ctx.fillRect(this.x - 5 + i * 10, this.y + this.height - 5, 3, 10);
+                            ctx.fillRect(this.x - 5 + i * 10, this.y + 5, 3, 10);
+                        }
+                        break;
+                        
+                    case 'wraith':
+                        // Ghost-like floating enemy
+                        ctx.globalAlpha = 0.7;
+                        const gradient = ctx.createRadialGradient(
+                            this.x + this.width/2, this.y + this.height/2, 0,
+                            this.x + this.width/2, this.y + this.height/2, this.width/2
+                        );
+                        gradient.addColorStop(0, this.color);
+                        gradient.addColorStop(1, 'transparent');
+                        ctx.fillStyle = gradient;
+                        ctx.beginPath();
+                        ctx.arc(this.x + this.width/2, this.y + this.height/2, this.width/2, 0, Math.PI * 2);
+                        ctx.fill();
+                        break;
+                        
+                    case 'bomber':
+                        // Bomb enemy
+                        ctx.fillStyle = this.color;
+                        ctx.beginPath();
+                        ctx.arc(this.x + this.width/2, this.y + this.height/2, this.width/2, 0, Math.PI * 2);
+                        ctx.fill();
+                        // Fuse
+                        ctx.strokeStyle = '#ffff00';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(this.x + this.width/2, this.y);
+                        ctx.lineTo(this.x + this.width/2, this.y - 10);
+                        ctx.stroke();
+                        // Spark
+                        ctx.fillStyle = '#ffff00';
+                        ctx.beginPath();
+                        ctx.arc(this.x + this.width/2, this.y - 10, 3, 0, Math.PI * 2);
+                        ctx.fill();
+                        break;
+                        
+                    case 'beast':
+                    case 'beast_small':
+                        // Beast enemy
+                        ctx.fillStyle = this.color;
+                        ctx.fillRect(this.x, this.y, this.width, this.height);
+                        // Spikes
+                        ctx.beginPath();
+                        ctx.moveTo(this.x + this.width/2, this.y);
+                        ctx.lineTo(this.x + this.width/2 - 5, this.y - 8);
+                        ctx.lineTo(this.x + this.width/2 + 5, this.y - 8);
+                        ctx.closePath();
+                        ctx.fill();
+                        break;
+                }
+                
+                ctx.restore();
+            }
+
+            hit() {
+                this.health--;
+            }
+        }
+
+        class Shard {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = 20;
+                this.height = 20;
+                this.time = 0;
+                this.collected = false;
+            }
+
+            update() {
+                this.time++;
+                this.y += Math.sin(this.time * 0.05) * 0.5;
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x + this.width/2, this.y + this.height/2);
+                ctx.rotate(this.time * 0.05);
+                
+                // Draw crystal shard
+                const gradient = ctx.createLinearGradient(-10, -10, 10, 10);
+                gradient.addColorStop(0, '#ffff00');
+                gradient.addColorStop(0.5, '#ffffff');
+                gradient.addColorStop(1, '#ffff00');
+                ctx.fillStyle = gradient;
+                
+                ctx.beginPath();
+                ctx.moveTo(0, -10);
+                ctx.lineTo(7, -3);
+                ctx.lineTo(7, 3);
+                ctx.lineTo(0, 10);
+                ctx.lineTo(-7, 3);
+                ctx.lineTo(-7, -3);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Glow effect
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = '#ffff00';
+                ctx.fill();
+                
+                ctx.restore();
+            }
+        }
+
+        class Gate {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = 60;
+                this.height = 100;
+                this.open = false;
+                this.time = 0;
+            }
+
+            draw(ctx) {
+                this.time++;
+                
+                ctx.save();
+                
+                if (this.open) {
+                    // Open gate - swirling portal
+                    const gradient = ctx.createRadialGradient(
+                        this.x + this.width/2, this.y + this.height/2, 0,
+                        this.x + this.width/2, this.y + this.height/2, this.width/2
+                    );
+                    gradient.addColorStop(0, '#ffffff');
+                    gradient.addColorStop(0.5, '#00ffff');
+                    gradient.addColorStop(1, '#ff00ff');
+                    ctx.fillStyle = gradient;
+                    
+                    ctx.globalAlpha = 0.8;
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.width/2, this.y + this.height/2, this.width/2, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Swirl effect
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    for (let i = 0; i < 3; i++) {
+                        const angle = (this.time * 0.05 + i * Math.PI * 2 / 3) % (Math.PI * 2);
+                        const r = this.width/2 * (0.5 + 0.5 * Math.sin(this.time * 0.1));
+                        ctx.arc(
+                            this.x + this.width/2 + Math.cos(angle) * r,
+                            this.y + this.height/2 + Math.sin(angle) * r,
+                            5, 0, Math.PI * 2
+                        );
+                    }
+                    ctx.stroke();
+                } else {
+                    // Closed gate
+                    ctx.fillStyle = '#666666';
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                    
+                    // Gate pattern
+                    ctx.strokeStyle = '#444444';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(this.x + this.width/2, this.y);
+                    ctx.lineTo(this.x + this.width/2, this.y + this.height);
+                    ctx.moveTo(this.x, this.y + this.height/2);
+                    ctx.lineTo(this.x + this.width, this.y + this.height/2);
+                    ctx.stroke();
+                    
+                    // Lock
+                    ctx.fillStyle = '#333333';
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.width/2, this.y + this.height/2, 10, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                ctx.restore();
+            }
+        }
+
+        class Platform {
+            constructor(x, y, width, height) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+            }
+
+            draw(ctx) {
+                // Draw platform with gradient
+                const gradient = ctx.createLinearGradient(this.x, this.y, this.x, this.y + this.height);
+                gradient.addColorStop(0, '#444466');
+                gradient.addColorStop(1, '#222233');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                
+                // Platform edge glow
+                ctx.strokeStyle = '#00ffff';
+                ctx.lineWidth = 1;
+                ctx.globalAlpha = 0.3;
+                ctx.strokeRect(this.x, this.y, this.width, this.height);
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        class Particle {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.type = type;
+                this.vx = (Math.random() - 0.5) * 10;
+                this.vy = (Math.random() - 0.5) * 10;
+                this.life = 30;
+                this.maxLife = 30;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vx *= 0.95;
+                this.vy *= 0.95;
+                this.life--;
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.globalAlpha = this.life / this.maxLife;
+                
+                if (this.type === 'explosion') {
+                    ctx.fillStyle = '#ff6600';
+                } else if (this.type === 'collect') {
+                    ctx.fillStyle = '#ffff00';
+                }
+                
+                ctx.fillRect(this.x, this.y, 4, 4);
+                ctx.restore();
+            }
+        }
+
+        // Initialize game
+        const game = new Game();
+    </script>
+</body>
+</html>
